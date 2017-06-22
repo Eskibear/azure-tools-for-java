@@ -325,6 +325,11 @@ public class UIHelperImpl implements UIHelper {
     }
 
     @Override
+    public void openEditor(Node node) {
+        //TODO: implement for intellij
+    }
+
+    @Override
     public void openInBrowser(String link) {
         try {
             Desktop.getDesktop().browse(URI.create(link));
