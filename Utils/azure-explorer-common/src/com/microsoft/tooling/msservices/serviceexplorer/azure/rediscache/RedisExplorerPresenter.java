@@ -28,7 +28,6 @@ import com.microsoft.azuretools.azurecommons.helpers.RedisKeyType;
 import com.microsoft.azuretools.core.mvp.model.rediscache.RedisConnectionPools;
 import com.microsoft.azuretools.core.mvp.model.rediscache.RedisExplorerMvpModel;
 import com.microsoft.azuretools.core.mvp.ui.base.MvpPresenter;
-import com.microsoft.azuretools.core.mvp.ui.base.SchedulerProvider;
 import com.microsoft.azuretools.core.mvp.ui.rediscache.RedisScanResult;
 import com.microsoft.azuretools.core.mvp.ui.rediscache.RedisValueData;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
@@ -41,6 +40,7 @@ import java.util.Set;
 import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.Tuple;
 import rx.Observable;
+import rx.schedulers.Schedulers;
 
 public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpPresenter<V> {
     
@@ -50,10 +50,6 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
     private static final String DEFAULT_SCAN_PATTERN = "*";
 
     private static final String CANNOT_GET_REDIS_INFO = "Cannot get Redis Cache's information.";
-    
-    public RedisExplorerPresenter(SchedulerProvider schedulerProvider) {
-        super(schedulerProvider);
-    } 
 
     /**
      * Called when the explorer needs the number of databases in Redis Cache.
@@ -67,7 +63,7 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
         Observable.fromCallable(() -> {
             return RedisExplorerMvpModel.getInstance().getDbNumber(sid, id);
         })
-        .subscribeOn(getSchedulerProvider().io())
+        .subscribeOn(Schedulers.io())
         .subscribe(number -> {
             DefaultLoader.getIdeHelper().invokeLater(() -> {
                 if (isViewDetached()) {
@@ -112,7 +108,7 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
         Observable.fromCallable(() -> {
             return RedisExplorerMvpModel.getInstance().scanKeys(sid, id, db, cursor, pattern);
         })
-        .subscribeOn(getSchedulerProvider().io())
+        .subscribeOn(Schedulers.io())
         .subscribe(result -> {
             DefaultLoader.getIdeHelper().invokeLater(() -> {
                 if (isViewDetached()) {
@@ -177,7 +173,7 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
 
             }
         })
-        .subscribeOn(getSchedulerProvider().io())
+        .subscribeOn(Schedulers.io())
         .subscribe(result -> {
             DefaultLoader.getIdeHelper().invokeLater(() -> {
                 if (isViewDetached()) {
