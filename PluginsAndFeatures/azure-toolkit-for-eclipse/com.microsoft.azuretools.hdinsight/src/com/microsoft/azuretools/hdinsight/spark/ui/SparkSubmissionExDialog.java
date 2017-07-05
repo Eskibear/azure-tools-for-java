@@ -25,11 +25,13 @@ import com.microsoft.azure.hdinsight.common.CommonConst;
 import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail;
 import com.microsoft.azure.hdinsight.spark.common.SparkSubmissionParameter;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.jface.dialogs.Dialog;
+import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.viewers.CellEditor;
 import org.eclipse.jface.viewers.ICellModifier;
 import org.eclipse.jface.viewers.ILabelProviderListener;
@@ -47,6 +49,7 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
 import com.microsoft.azure.hdinsight.common.CallBack;
+import com.microsoft.tooling.msservices.components.DefaultLoader;
 import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 import com.microsoft.azuretools.azurecommons.helpers.StringHelper;
@@ -57,7 +60,6 @@ import com.microsoft.azuretools.hdinsight.Activator;
 import com.microsoft.azuretools.hdinsight.projects.HDInsightProjectNature;
 import com.microsoft.azuretools.hdinsight.spark.common2.SparkSubmitModel;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,17 +85,21 @@ public class SparkSubmissionExDialog extends Dialog {
     private Button localArtifactRadioButton;
 
     private SparkSubmitModel submitModel;
-    private IProject myProject;
     private CallBack callBack;
     private List<IClusterDetail> cachedClusterDetails;
     private Map<String, Object> jobConfigMap = new HashMap<String, Object>();
 
-    public SparkSubmissionExDialog(Shell parentShell, @NotNull List<IClusterDetail> cachedClusterDetails, @Nullable IProject project, @Nullable CallBack callBack) {
+    public SparkSubmissionExDialog(Shell parentShell, @NotNull List<IClusterDetail> cachedClusterDetails, @Nullable CallBack callBack) {
         super(parentShell);
-        this.cachedClusterDetails = cachedClusterDetails;
-        this.myProject = project;
         this.callBack = callBack;
+        this.cachedClusterDetails = cachedClusterDetails;
         submitModel = new SparkSubmitModel(cachedClusterDetails);
+
+//        initializeComponents();
+//        initializeModel();
+//        updateTableColumn();
+//        loadParameter();
+//        setSubmitButtonStatus();
     }
 
     @Override
@@ -137,8 +143,12 @@ public class SparkSubmissionExDialog extends Dialog {
         clustersListComboBox.setLayoutData(gridData);
         clustersListComboBox.setToolTipText("The HDInsight Spark cluster you want to submit your application to. Only Linux cluster is supported.");
         for (IClusterDetail clusterDetail : cachedClusterDetails) {
+//            mapClusterNameToClusterDetail.put(clusterDetail.getName(), clusterDetail);
             clustersListComboBox.add(clusterDetail.getName());
             clustersListComboBox.setData(clusterDetail.getName(), clusterDetail);
+//            if (clusterComboBoxModel.getSize() == 0) {
+//                clusterComboBoxModel.setSelectedItem(clusterDetail.getName());
+//            }
         }
         if (cachedClusterDetails.size() > 0) {
         	clustersListComboBox.select(0);
@@ -184,14 +194,7 @@ public class SparkSubmissionExDialog extends Dialog {
         selectedArtifactComboBox.setLayoutData(gridData);
         String[] projects = getProjects();
         selectedArtifactComboBox.setItems(projects);
-        if (myProject != null) {
-        	final String selectedProjectName = myProject.getName();
-        	for (int i = 0; i < projects.length; ++i) {
-        		if (projects[i].equalsIgnoreCase(selectedProjectName)) {
-        			selectedArtifactComboBox.select(i);
-        		}
-    		}
-        } else if (projects.length > 0) {
+        if (projects.length > 0) {
         	selectedArtifactComboBox.select(0);
         }
         
