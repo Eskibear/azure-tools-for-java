@@ -299,7 +299,7 @@ public class SparkSubmissionExDialog extends Dialog {
 		    mainClassCombo.setItems(names);
 		    mainClassCombo.select(0);
 		} catch (CoreException e1) {
-			Activator.getDefault().log("get main class list error", e1);
+			// Show nothing if we get this exception
 		}
 	    
 		Label jobConfigurationLabel = new Label(container, SWT.LEFT);
