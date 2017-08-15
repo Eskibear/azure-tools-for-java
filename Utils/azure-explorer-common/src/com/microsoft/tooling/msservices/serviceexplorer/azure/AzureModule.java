@@ -39,6 +39,7 @@ import com.microsoft.tooling.msservices.serviceexplorer.azure.docker.DockerHostM
 import com.microsoft.tooling.msservices.serviceexplorer.azure.storage.StorageModule;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.vmarm.VMArmModule;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.rediscache.RedisCacheModule;
+import com.microsoft.tooling.msservices.serviceexplorer.azure.webapp.WebAppModule;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.webapps.WebappsModule;
 
 import java.util.List;
@@ -54,6 +55,7 @@ public class AzureModule extends AzureRefreshableNode {
     private RedisCacheModule redisCacheModule;
     private StorageModule storageModule;
     private WebappsModule webappsModule;
+    private WebAppModule webAppModule;
     private HDInsightRootModule hdInsightModule;
     private DockerHostModule dockerHostModule;
 
@@ -62,6 +64,7 @@ public class AzureModule extends AzureRefreshableNode {
         this.project = project;
         storageModule = new StorageModule(this);
         webappsModule = new WebappsModule(this);
+        webAppModule = new WebAppModule(this);
         //hdInsightModule = new HDInsightRootModule(this);
         vmArmServiceModule = new VMArmModule(this);
         redisCacheModule = new RedisCacheModule(this);
@@ -126,6 +129,9 @@ public class AzureModule extends AzureRefreshableNode {
         if (!isDirectChild(webappsModule)) {
             addChildNode(webappsModule);
         }
+        if (!isDirectChild(webAppModule)) {
+            addChildNode(webAppModule);
+        }
         if (hdInsightModule != null && !isDirectChild(hdInsightModule)) {
             addChildNode(hdInsightModule);
         }
@@ -146,6 +152,7 @@ public class AzureModule extends AzureRefreshableNode {
                 redisCacheModule.load(true);
                 storageModule.load(true);
                 webappsModule.load(true);
+                webAppModule.load(true);
                 hdInsightModule.load(true);
                 dockerHostModule.load(true);
             }
