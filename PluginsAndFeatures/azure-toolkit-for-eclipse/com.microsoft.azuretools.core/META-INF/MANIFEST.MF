@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Azure Core Plugin Library
 Bundle-SymbolicName: com.microsoft.azuretools.core;singleton:=true
-Bundle-Version: 3.0.4.qualifier
+Bundle-Version: 3.0.7.qualifier
 Bundle-Activator: com.microsoft.azuretools.core.Activator
 Require-Bundle: org.eclipse.ui,
  org.eclipse.core.runtime,
@@ -13,8 +13,16 @@ Require-Bundle: org.eclipse.ui,
  org.eclipse.wst.common.frameworks;bundle-version="1.2.0";resolution:=optional,
  org.eclipse.jst.j2ee;bundle-version="1.1.802";resolution:=optional,
  org.eclipse.jst.j2ee.web;bundle-version="1.1.810";resolution:=optional,
- com.microsoft.azuretools.sdk;bundle-version="3.0.4",
- com.jcraft.jsch;visibility:=reexport
+ com.microsoft.azuretools.sdk;bundle-version="3.0.7",
+ com.jcraft.jsch;visibility:=reexport,
+ org.eclipse.equinox.p2.ui,
+ org.eclipse.equinox.p2.operations,
+ org.eclipse.equinox.p2.core,
+ org.eclipse.equinox.p2.repository,
+ org.eclipse.equinox.p2.metadata,
+ org.eclipse.epp.mpc.ui,
+ org.eclipse.m2e.core,
+ org.eclipse.m2e.maven.runtime
 Bundle-ActivationPolicy: lazy
 Bundle-RequiredExecutionEnvironment: JavaSE-1.8
 Bundle-Vendor: Microsoft Corp.
@@ -56,8 +64,6 @@ Export-Package: com.microsoft.applicationinsights.preference,
  com.microsoft.azuretools.azurecommons.deploy,
  com.microsoft.azuretools.azurecommons.helpers,
  com.microsoft.azuretools.azurecommons.messagehandler,
- com.microsoft.azuretools.core.mvp.ui.base,
- com.microsoft.azuretools.core.mvp.ui.rediscache,
  com.microsoft.azuretools.azurecommons.rediscacheprocessors,
  com.microsoft.azuretools.azurecommons.tasks,
  com.microsoft.azuretools.azurecommons.util,
@@ -69,6 +75,10 @@ Export-Package: com.microsoft.applicationinsights.preference,
  com.microsoft.azuretools.core.handlers,
  com.microsoft.azuretools.core.mvp.model,
  com.microsoft.azuretools.core.mvp.model.rediscache,
+ com.microsoft.azuretools.core.mvp.model.webapp,
+ com.microsoft.azuretools.core.mvp.ui.base,
+ com.microsoft.azuretools.core.mvp.ui.containerregistry,
+ com.microsoft.azuretools.core.mvp.ui.rediscache,
  com.microsoft.azuretools.core.storageregistry,
  com.microsoft.azuretools.core.telemetry,
  com.microsoft.azuretools.core.testers,
@@ -90,10 +100,11 @@ Export-Package: com.microsoft.applicationinsights.preference,
  com.microsoft.tooling.msservices.model.vm,
  com.microsoft.tooling.msservices.serviceexplorer,
  com.microsoft.tooling.msservices.serviceexplorer.azure,
+ com.microsoft.tooling.msservices.serviceexplorer.azure.container,
  com.microsoft.tooling.msservices.serviceexplorer.azure.docker,
  com.microsoft.tooling.msservices.serviceexplorer.azure.rediscache,
  com.microsoft.tooling.msservices.serviceexplorer.azure.storage,
  com.microsoft.tooling.msservices.serviceexplorer.azure.storage.asm,
  com.microsoft.tooling.msservices.serviceexplorer.azure.vmarm,
- com.microsoft.tooling.msservices.serviceexplorer.azure.webapps
+ com.microsoft.tooling.msservices.serviceexplorer.azure.webapp
 Import-Package: org.eclipse.core.expressions

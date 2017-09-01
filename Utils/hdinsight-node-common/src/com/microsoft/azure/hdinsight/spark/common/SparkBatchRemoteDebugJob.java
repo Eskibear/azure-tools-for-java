@@ -27,9 +27,7 @@ import com.microsoft.azure.hdinsight.sdk.common.HttpResponse;
 import com.microsoft.azure.hdinsight.sdk.rest.ObjectConvertUtils;
 import com.microsoft.azure.hdinsight.sdk.rest.yarn.rm.App;
 import com.microsoft.azure.hdinsight.sdk.rest.yarn.rm.AppResponse;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
+import com.microsoft.azure.hdinsight.spark.jobs.JobUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -41,6 +39,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static java.lang.Thread.sleep;
 
@@ -185,9 +184,13 @@ public class SparkBatchRemoteDebugJob implements ISparkBatchDebugJob, ILogger {
                             "Bad spark job response: " + httpResponse.getMessage()));
 
             this.setBatchId(jobResp.getId());
+
+            return this;
         }
 
-        return this;
+        throw new UnknownServiceException(String.format(
+                "Failed to submit Spark remove debug job. error code: %d, type: %s, reason: %s.",
+                httpResponse.getCode(), httpResponse.getContent(), httpResponse.getMessage()));
     }
 
     /**
@@ -211,6 +214,28 @@ public class SparkBatchRemoteDebugJob implements ISparkBatchDebugJob, ILogger {
     }
 
     /**
+     * Get the Yarn container JDB listening port
+     *
+     * @param containerLogUrl container Yarn log URL
+     * @return port number
+     * @throws UnknownServiceException when there is not JDB listening port
+     */
+    public int getYarnContainerJDBListenPort(String containerLogUrl) throws UnknownServiceException {
+        int port = this.parseJvmDebuggingPort(JobUtils.getInformationFromYarnLogDom(
+                this.getSubmission().getCredentialsProvider(),
+                containerLogUrl,
+                "stdout",
+                -4096,
+                0));
+
+        if (port > 0) {
+            return port;
+        }
+
+        throw new UnknownServiceException("JVM debugging port is not listening");
+    }
+
+    /**
      * Get Spark Batch job driver debugging port number
      *
      * @return Spark driver node debugging port
@@ -220,24 +245,7 @@ public class SparkBatchRemoteDebugJob implements ISparkBatchDebugJob, ILogger {
     public int getSparkDriverDebuggingPort() throws IOException {
         String driverLogUrl = this.getSparkJobDriverLogUrl(this.getConnectUri(), this.getBatchId());
 
-        try {
-            /*
-             * The driverLogUrl sample here is:
-             *     https://spkdbg.azurehdinsight.net/yarnui/10.0.0.15/node/containerlogs/container_e02_1492415936046_0015_01_000001/livy
-             */
-            HttpResponse httpResponse = this.getSubmission().getHttpResponseViaGet(
-                    new URI(driverLogUrl + "/").resolve("stdout?start=-4096").toString());
-
-            if (httpResponse.getCode() >= 200 && httpResponse.getCode() < 300) {
-                int port = this.parseJvmDebuggingPort(httpResponse.getMessage());
-
-                if (port > 0) {
-                    return port;
-                }
-            }
-        } catch (URISyntaxException ignore) { }
-
-        throw new UnknownServiceException("JVM debugging port is not listening");
+        return getYarnContainerJDBListenPort(driverLogUrl);
     }
 
     /**
@@ -275,31 +283,21 @@ public class SparkBatchRemoteDebugJob implements ISparkBatchDebugJob, ILogger {
     }
 
     /**
-     * Parse JVM debug port from Yarn container log HTML web page
+     * Parse JVM debug port from listening string
      *
-     * @param html the HTML content to parse
+     * @param listening the listening message
      * @return the listening port found, otherwise -1
      */
-    protected int parseJvmDebuggingPort(String html) {
-        Document doc = Jsoup.parse(html);
-
+    protected int parseJvmDebuggingPort(String listening) {
         /*
-         * The content about JVM debug port message looks like:
-         * <td class="content">
-         *     <pre>...</pre>
-         *     <pre>Listening for transport dt_socket at address: 6006 </pre>
-         * </td>
+         * The content about JVM debug port listening message looks like:
+         *     Listening for transport dt_socket at address: 6006
          */
-        Element log = doc.select("td.content").select("pre").last();
-        if (log == null) {
-            return -1;
-        }
 
-        Pattern debugPortRegex = Pattern.compile("Listening for transport dt_socket at address: (?<port>\\d+)");
-        Matcher debugPortMatcher = debugPortRegex.matcher(log.text());
+        Pattern debugPortRegex = Pattern.compile("Listening for transport dt_socket at address: (?<port>\\d+)\\s*");
+        Matcher debugPortMatcher = debugPortRegex.matcher(listening);
 
         return debugPortMatcher.matches() ? Integer.parseInt(debugPortMatcher.group("port")) : -1;
-
     }
 
     /**
@@ -410,7 +408,7 @@ public class SparkBatchRemoteDebugJob implements ISparkBatchDebugJob, ILogger {
      * @return the Spark Job driver log URL
      * @throws IOException exceptions in transaction
      */
-    protected String getSparkJobDriverLogUrl(URI batchBaseUri, int batchId) throws IOException {
+    public String getSparkJobDriverLogUrl(URI batchBaseUri, int batchId) throws IOException {
         int retries = 0;
 
         do {
@@ -460,46 +458,64 @@ public class SparkBatchRemoteDebugJob implements ISparkBatchDebugJob, ILogger {
             String connectUrl,
             SparkSubmissionParameter submissionParameter,
             SparkBatchSubmission submission) throws DebugParameterDefinedException, URISyntaxException {
-        final String driverDebugOption = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0";
+        final String debugJvmOption = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0";
         final String sparkJobDriverJvmOptionConfKey = "spark.driver.extraJavaOptions";
+        final String sparkJobExecutorJvmOptionConfKey = "spark.executor.extraJavaOptions";
         final String sparkJobDriverRetriesConfKey = "spark.yarn.maxAppAttempts";
+        final String sparkJobDriverNetworkTimeoutKey = "spark.network.timeout";
+        final String sparkJobExecutorMaxFailuresKey = "spark.yarn.max.executor.failures";
+        final String numExecutorsKey = "numExecutors";
         final String jvmDebugOptionPattern = ".*\\bsuspend=(?<isSuspend>[yn]),address=(?<port>\\d+).*";
 
         Map<String, Object> jobConfig = submissionParameter.getJobConfig();
         Object sparkConfigEntry = jobConfig.get(SparkSubmissionParameter.Conf);
         SparkConfigures sparkConf = (sparkConfigEntry != null && sparkConfigEntry instanceof Map) ?
                 new SparkConfigures(sparkConfigEntry) :
-                null;
+                new SparkConfigures();
 
-        String carriedDriverOption = "";
-        String driverOption;
 
-        if (sparkConf != null) {
-            carriedDriverOption = sparkConf.getOrDefault(sparkJobDriverJvmOptionConfKey,"").toString();
-            if (Pattern.compile(jvmDebugOptionPattern).matcher(carriedDriverOption).matches()) {
-                throw new DebugParameterDefinedException(
-                        "The driver Debug parameter is defined in Spark job configuration: " +
-                                sparkConf.get(sparkJobDriverJvmOptionConfKey));
-            }
+        // Check the conflict configurations
+        String carriedDriverOption = sparkConf.getOrDefault(sparkJobDriverJvmOptionConfKey,"").toString();
+        if (Pattern.compile(jvmDebugOptionPattern).matcher(carriedDriverOption).matches()) {
+            throw new DebugParameterDefinedException(
+                    "The driver Debug parameter is defined in Spark job configuration: " +
+                            sparkConf.get(sparkJobDriverJvmOptionConfKey));
+        }
 
-            if (sparkConf.get(sparkJobDriverRetriesConfKey) != null) {
-                throw new DebugParameterDefinedException(
-                        "The driver max app attempts parameter is defined in Spark job configuration: " +
-                                sparkConf.get(sparkJobDriverRetriesConfKey));
-            }
-        } else {
-            sparkConf = new SparkConfigures();
-            jobConfig.put(SparkSubmissionParameter.Conf, sparkConf);
+        String carriedExecutorOption = sparkConf.getOrDefault(sparkJobExecutorJvmOptionConfKey,"").toString();
+        if (Pattern.compile(jvmDebugOptionPattern).matcher(carriedExecutorOption).matches()) {
+            throw new DebugParameterDefinedException(
+                    "The executor Debug parameter is defined in Spark job configuration: " +
+                            sparkConf.get(sparkJobExecutorJvmOptionConfKey));
+        }
+
+        DebugParameterDefinedException checkingErr = Stream.of(sparkJobDriverNetworkTimeoutKey,
+                                                               sparkJobExecutorMaxFailuresKey,
+                                                               sparkJobDriverRetriesConfKey)
+                .filter(sparkConf::containsKey)
+                .map(key -> new DebugParameterDefinedException(
+                                "The " + key + " is defined in Spark job configuration: " + sparkConf.get(key)))
+                .findFirst()
+                .orElse(null);
+
+        if (checkingErr != null) {
+            throw checkingErr;
         }
 
         // Append or overwrite the Spark job driver JAVA option
-        driverOption = (carriedDriverOption.trim() + " " + driverDebugOption).trim();
+        String driverOption = (carriedDriverOption.trim() + " " + debugJvmOption).trim();
+        String executorOption = (carriedExecutorOption.trim() + " " + debugJvmOption).trim();
         HashMap<String, Object> jobConfigWithDebug = new HashMap<>(submissionParameter.getJobConfig());
         SparkConfigures sparkConfigWithDebug = new SparkConfigures(sparkConf);
 
         sparkConfigWithDebug.put(sparkJobDriverJvmOptionConfKey, driverOption);
+        sparkConfigWithDebug.put(sparkJobExecutorJvmOptionConfKey, executorOption);
+        sparkConfigWithDebug.put(sparkJobExecutorMaxFailuresKey, "1");
         sparkConfigWithDebug.put(sparkJobDriverRetriesConfKey, "1");
+        sparkConfigWithDebug.put(sparkJobDriverNetworkTimeoutKey, "10000000");
+
         jobConfigWithDebug.put(SparkSubmissionParameter.Conf, sparkConfigWithDebug);
+
         SparkSubmissionParameter debugSubmissionParameter = new SparkSubmissionParameter(
                 submissionParameter.getClusterName(),
                 submissionParameter.isLocalArtifact(),
@@ -508,7 +524,7 @@ public class SparkBatchRemoteDebugJob implements ISparkBatchDebugJob, ILogger {
                 submissionParameter.getFile(),
                 submissionParameter.getMainClassName(),
                 submissionParameter.getReferencedFiles(),
-                submissionParameter.getReferencedFiles(),
+                submissionParameter.getReferencedJars(),
                 submissionParameter.getArgs(),
                 jobConfigWithDebug
         );

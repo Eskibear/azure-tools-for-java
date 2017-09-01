@@ -1,19 +1,43 @@
-<idea-plugin version="2">
+<idea-plugin>
   <id>com.microsoft.tooling.msservices.intellij.azure</id>
   <name>Azure Toolkit for IntelliJ</name>
-  <version>3.0.4</version>
+  <version>3.0.7</version>
   <vendor email="java@microsoft.com" url="http://www.microsoft.com">Microsoft</vendor>
 
   <description><![CDATA[
-      Azure Toolkit for IntelliJ IDEA.
+      <html>
+        <p>These plugins allow Java developers to easily create, develop, configure, test, and deploy highly available and scalable Java web apps to Azure from IntelliJ on all supported platforms.</p>
+        <ul>
+          <li>Azure Web App Workflow: You can run your web applications on Azure Web App with One-Click experience using Azure Toolkits for IntelliJ.</li>
+          <li>Azure Container Workflow: You can dockerize and run your web application on Azure Web App (Linux) via Azure Container Registry.</li>
+          <li>Azure Explorer: You can view and manage your cloud resources on Azure with Azure Explorer in Azure Toolkits for IntelliJ.</li>
+        </ul>
+      </html>
     ]]></description>
 
-  <change-notes><![CDATA[
+  <change-notes>
+    <![CDATA[
+    <html>
+      <h3>[3.0.7]</h3>
+      <ul>
+        <li>Support Community Edition: The Azure Toolkit for IntelliJ now supports deploying your Maven projects to Azure App Service from IntelliJ IDEA, both Community and Ultimate Edition.</li>
+        <li>Improved Web App Workflow: You can now run your web applications on Azure Web App with One-Click experience using Azure Toolkit for IntelliJ.</li>
+        <li>New Container Workflow: You can now dockerize and run your web application on Azure Web App (Linux) via Azure Container Registry.</li>
+        <li>Spark remote debugging in IntelliJ now support debugging of both driver and executor code depending on where the breakpoint is set.</li>
+        <li>Fixed some bugs.</li>
+      </ul>
+      <h3>[3.0.6]</h3>
+      <ul>
+        <li>Added the Redis Cache Explorer that allows users to scan/get keys and their values.</li>
+        <li>Improved Spark job remote debugging support(show log in console, apply and load debugging config).</li>
+        <li>Fixed some bugs.</li>
+      </ul>
+    </html>
     ]]>
   </change-notes>
 
   <!-- please see https://confluence.jetbrains.com/display/IDEADEV/Build+Number+Ranges for description -->
-  <idea-version since-build="141"/>
+  <idea-version since-build="171.3780" until-build="172.*"/>
   <resource-bundle>com.microsoft.intellij.ui.messages.messages</resource-bundle>
   <resource-bundle>com.microsoft.intellij.hdinsight.messages.messages</resource-bundle>
   <depends optional="true">org.intellij.scala</depends>
@@ -46,6 +70,8 @@
     <fileEditorProvider implementation="com.microsoft.intellij.helpers.storage.QueueExplorerFileEditorProvider"/>
     <fileEditorProvider implementation="com.microsoft.intellij.helpers.storage.TableExplorerFileEditorProvider"/>
     <fileEditorProvider implementation="com.microsoft.intellij.helpers.rediscache.RedisCachePropertyViewProvider"/>
+    <fileEditorProvider implementation="com.microsoft.intellij.helpers.rediscache.RedisCacheExplorerProvider"/>
+    <fileEditorProvider implementation="com.microsoft.intellij.helpers.containerregistry.ContainerRegistryPropertyViewProvider"/>
     <toolWindow
           anchor="left"
           factoryClass="com.microsoft.intellij.components.ServerExplorerToolWindowFactory"
@@ -61,10 +87,11 @@
         canCloseContents="false"
         icon="/icons/SparkSubmissionToolWindow.png"/>
 
+    <configurationType implementation="com.microsoft.intellij.runner.webapp.WebAppConfigurationType"/>
     <configurationType implementation="com.microsoft.azure.hdinsight.spark.run.configuration.RemoteDebugRunConfigurationType"/>
+    <programRunner implementation="com.microsoft.intellij.runner.webapp.webappconfig.WebAppRunner"/>
     <programRunner implementation="com.microsoft.azure.hdinsight.spark.run.SparkBatchJobDebuggerRunner" />
-    <programRunner implementation="com.microsoft.azure.hdinsight.spark.run.SparkBatchJobRunner" />
-
+    <configurationType implementation="com.microsoft.intellij.runner.container.AzureDockerSupportConfigurationType"/>
   </extensions>
 
   <application-components>
@@ -93,10 +120,6 @@
     <action id="Actions.ApplicationInsightsAction"
             class="com.microsoft.intellij.actions.ApplicatioInsightsAction" text="Configure Application Insights..."
             description="Configure Application Insights..." icon="/icons/ApplicationInsights_16.png"/>
-    <action id="Actions.AzureWebDeploy" class="com.microsoft.intellij.actions.AzureWebDeployAction"
-            text="Publish as Azure Web App..." description="Azure website deployment for Java"
-            icon="/icons/PublishWebApp_16.png">
-    </action>
     <action id="Actions.AzureDockerHostDeploy" class="com.microsoft.intellij.actions.AzureDockerHostDeployAction"
             text="Publish as Docker Container..." description="Azure website deployment for Java on Docker"
             icon="/icons/PublishDockerContainer_16.png">
@@ -117,32 +140,45 @@
     <action id="AzureToolkit.AzureSignIn" class="com.microsoft.azuretools.ijidea.actions.AzureSignInAction" text="Azure Sign In..." />
     <action id="AzureToolkit.SelectSubscriptions" class="com.microsoft.azuretools.ijidea.actions.SelectSubscriptionsAction" text="Select Subscriptions..."
             description="ShowSubscriptionsAction" />
+    <action id="Actions.WebDeployAction" class="com.microsoft.intellij.actions.WebDeployAction"
+            text="Run on Web App" description="Run on Web App"
+            icon="/icons/PublishWebApp_16.png">
+    </action>
+    <action id="Actions.AddDockerSupport" class="com.microsoft.intellij.actions.AddDockerSupportAction"
+            text="Add Docker Support" description="Add Docker Support"
+            icon="/icons/AddDockerSupport_16.png">
+    </action>
+    <action id="Actions.RunOnDockerHost" class="com.microsoft.intellij.actions.RunOnDockerHostAction"
+            text="Docker Run" description="Docker Run"
+            icon="/icons/DockerRun_16.png">
+    </action>
+    <action id="Actions.WebAppOnLinux" class="com.microsoft.intellij.actions.WebAppOnLinuxAction"
+            text="Run on Web App (Linux)" description="Run on Web App (Linux)"
+            icon="/icons/PublishWebAppOnLinux_16.png">
+    </action>
 
     <group id="AzurePopupGroup" text="Azure" description="Azure" icon="/icons/azure.png" popup="true"
            class="com.microsoft.intellij.actions.AzurePopupGroup">
-      <reference ref="Actions.AzureWebDeploy"/>
+      <reference ref="Actions.WebDeployAction"/>
+      <separator/>
+      <reference ref="Actions.AddDockerSupport"/>
+      <reference ref="Actions.RunOnDockerHost"/>
+      <reference ref="Actions.WebAppOnLinux"/>
+      <separator/>
       <reference ref="Actions.AzureDockerHostDeploy"/>
       <separator/>
       <reference ref="Actions.ApplicationInsightsAction"/>
-      <separator/>
       <reference ref="Actions.LibraryConfigurationAction"/>
-      <separator/>
-      <reference ref="AzureToolkit.AzureSignIn"/>
     </group>
 
     <group id="AzureToolbarGroup" text="Azure" description="Azure">
       <group id="PublishToAzureGroup" text="Publish Group" description="Publish Group" popup="true" icon="/icons/Publish_16.png">
-        <reference ref="Actions.AzureWebDeploy"/>
+        <reference ref="Actions.WebDeployAction"/>
+        <reference ref="Actions.WebAppOnLinux"/>
         <reference ref="Actions.AzureDockerHostDeploy"/>
       </group>
       <reference ref="Actions.AzureExplorerOpenAction"/>
       <reference ref="Actions.AzureCodeSamples"/>
-    </group>
-
-    <group id="AzureWebDeployGroup" text="Azure Web Deploy" description="Azure website deployment for Java"
-           popup="false">
-        <separator/>
-        <reference ref="Actions.AzureWebDeploy"/>
     </group>
 
     <group id="AzureToolkit.AzureActionGroup"

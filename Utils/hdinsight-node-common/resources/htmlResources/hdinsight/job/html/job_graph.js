@@ -8,7 +8,7 @@ function renderJobGraphOnApplicationLevel(jobs) {
     var counters = jobs.length, i = 0;
     g.setNode(0, {label :"Driver",   class : "type-TOP"});
     for(i = 1; i <= counters; ++i) {
-        var s = "Job " + i;
+        var s = "Job " + (i - 1);
         var currentClass = jobs[i - 1]["status"] === "SUCCEEDED" ? "sparkJob-success" : "sparkJob-error";
         g.setNode(i, {label: s,  class : currentClass});
     }
@@ -193,7 +193,7 @@ function setToolTipForStage(stageId) {
         });
         if (filterStages.length === 1) {
             var selectedStage = filterStages[0];
-            return "<p class='name'>Stage Details:</p>"
+            return "<p class='name'>Stage ID:{0}</p>".format(selectedStage['stageId'])
                 + "<p class='description jobtips' align='left'>Input Bytes: {0}<br>".format(selectedStage['inputBytes'])
                 +  "Output Bytes: {0}<br>".format(selectedStage['outputBytes'])
                 + "Shuffle Read Bytes: {0}<br>".format(selectedStage['shuffleReadBytes'])

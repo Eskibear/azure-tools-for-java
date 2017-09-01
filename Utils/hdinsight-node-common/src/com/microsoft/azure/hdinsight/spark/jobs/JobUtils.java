@@ -21,6 +21,8 @@
  */
 package com.microsoft.azure.hdinsight.spark.jobs;
 
+import com.gargoylesoftware.htmlunit.BrowserVersion;
+import com.gargoylesoftware.htmlunit.Cache;
 import com.gargoylesoftware.htmlunit.WebClient;
 import com.gargoylesoftware.htmlunit.html.DomElement;
 import com.gargoylesoftware.htmlunit.html.DomNodeList;
@@ -36,6 +38,7 @@ import com.microsoft.azure.hdinsight.sdk.rest.yarn.rm.ApplicationMasterLogs;
 import com.microsoft.azure.hdinsight.spark.jobs.livy.LivyBatchesInformation;
 import com.microsoft.azure.hdinsight.spark.jobs.livy.LivySession;
 import com.microsoft.azuretools.azurecommons.helpers.NotNull;
+import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 import com.microsoft.azuretools.azurecommons.helpers.StringHelper;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
 import com.sun.net.httpserver.HttpExchange;
@@ -51,13 +54,16 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import rx.Observable;
+import rx.Subscription;
+import rx.schedulers.Schedulers;
 
 import java.awt.*;
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.lang.reflect.Type;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
 public class JobUtils {
@@ -157,7 +163,7 @@ public class JobUtils {
         }
     }
 
-    private static final WebClient HTTP_WEB_CLIENT = new WebClient();
+    private static final Cache globalCache = new Cache();
 
     private static final String DRIVER_LOG_INFO_URL = "%s/yarnui/jobhistory/logs/%s/port/%s/%s/%s/livy";
 
@@ -192,27 +198,124 @@ public class JobUtils {
     private static ApplicationMasterLogs getYarnLogsFromWebClient(@NotNull final IClusterDetail clusterDetail, @NotNull final String url) throws HDIException, IOException {
         final CredentialsProvider credentialsProvider  =  new BasicCredentialsProvider();
         credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(clusterDetail.getHttpUserName(), clusterDetail.getHttpPassword()));
-        HTTP_WEB_CLIENT.setCredentialsProvider(credentialsProvider);
 
-        String standerr = getInformationFromYarnLogDom(url + "/stderr/?start=0");
-        String standout = getInformationFromYarnLogDom(url + "/stout/?start=0");
-        String directoryInfo = getInformationFromYarnLogDom(url + "/directory.info/?start=0");
+        String standerr = getInformationFromYarnLogDom(credentialsProvider, url, "stderr", 0, 0);
+        String standout = getInformationFromYarnLogDom(credentialsProvider, url, "stout", 0, 0);
+        String directoryInfo = getInformationFromYarnLogDom(credentialsProvider, url, "directory.info", 0, 0);
+
         return new ApplicationMasterLogs(standout, standerr, directoryInfo);
     }
 
-    private static String getInformationFromYarnLogDom(@NotNull String url) {
+    public static String getInformationFromYarnLogDom(final CredentialsProvider credentialsProvider,
+                                                      @NotNull String baseUrl,
+                                                      @NotNull String type,
+                                                      long start,
+                                                      int size) {
+        final WebClient HTTP_WEB_CLIENT = new WebClient(BrowserVersion.CHROME);
+        HTTP_WEB_CLIENT.setCache(globalCache);
+
+        if (credentialsProvider != null) {
+            HTTP_WEB_CLIENT.setCredentialsProvider(credentialsProvider);
+        }
+
         try {
-            HtmlPage htmlPage = HTTP_WEB_CLIENT.getPage(url);
+            URI url = new URI(baseUrl + "/").resolve(
+                    String.format("%s?start=%d", type, start) +
+                        (size <= 0 ? "" : String.format("&&end=%d", start + size)));
+            HtmlPage htmlPage = HTTP_WEB_CLIENT.getPage(url.toString());
             // parse pre tag from html response
             // there's only one 'pre' in response
             DomNodeList<DomElement> preTagElements = htmlPage.getElementsByTagName("pre");
             if (preTagElements.size() != 0) {
-                return preTagElements.get(0).asText();
+                return preTagElements.get(preTagElements.size() - 1).asText();
             }
-        } catch (IOException e) {
+        } catch (URISyntaxException e) {
+            LOGGER.error("baseUrl has syntax error: " + baseUrl);
+        } catch (Exception e) {
             LOGGER.error("get Driver Log Error", e);
         }
         return "";
+    }
+
+    /**
+     * To create an Observable for specified Yarn container log type
+     *
+     * @param credentialsProvider credential provider for HDInsight
+     * @param stop the stop observable to cancel the log fetch, refer to Observable.window() operation
+     * @param containerLogUrl the contaniner log url
+     * @param type the log type
+     * @param blockSize the block size for one fetch, the value 0 for as many as possible
+     * @return the log Observable
+     */
+    public static Observable<String> createYarnLogObservable(@NotNull final CredentialsProvider credentialsProvider,
+                                                             @Nullable final Observable<Object> stop,
+                                                             @NotNull final String containerLogUrl,
+                                                             @NotNull final String type,
+                                                             final int blockSize) {
+        int retryIntervalMs = 1000;
+
+        if (blockSize <= 0)
+            return Observable.empty();
+
+        return Observable.create((Observable.OnSubscribe<String>) ob -> {
+            long nextStart = 0;
+            String remainedLine = "";
+            String logs;
+            Thread currentThread = Thread.currentThread();
+
+            // Refer to the Observable.window() operation:
+            //    http://reactivex.io/documentation/operators/window.html
+            // The event from `stop` observable will stop the log fetch
+            Optional<Subscription> stopSubscriptionOptional = Optional.ofNullable(stop).map(stopOb ->
+                    stopOb.subscribe(any -> currentThread.interrupt()));
+
+            try {
+                while (!ob.isUnsubscribed()) {
+                    logs = JobUtils.getInformationFromYarnLogDom(
+                            credentialsProvider, containerLogUrl, type, nextStart, blockSize);
+                    int lastLineBreak = logs.lastIndexOf('\n');
+
+                    if (lastLineBreak < 0) {
+                        if (logs.isEmpty() && !remainedLine.isEmpty()) {
+                            // Remained line is a full line since the backend producing logs line by line
+                            ob.onNext(remainedLine);
+                            remainedLine = "";
+                        } else {
+                            remainedLine += logs;
+                            nextStart += logs.length();
+                        }
+                    } else {
+                        long handledLength = new BufferedReader(new StringReader(
+                                                remainedLine + logs.substring(0, lastLineBreak)))
+                                .lines()
+                                .map(line -> {
+                                    ob.onNext(line);
+
+                                    // Count the line length with linebreak
+                                    // We need to handle this since the web client may convert the LF to CRLF
+                                    return (line.length() + 1);
+                                })
+                                .reduce((x, y) -> x + y)
+                                .orElse(0);
+
+                        remainedLine = "";
+                        nextStart += handledLength;
+                    }
+
+                    Thread.sleep(retryIntervalMs);
+                }
+            } catch (InterruptedException ignore) {
+            } finally {
+                // Get the rest logs from history server
+                // Don't worry about the log is moved to history server, the YarnUI can do URL redirect by itself
+                logs = JobUtils.getInformationFromYarnLogDom(credentialsProvider, containerLogUrl, type, nextStart, 0);
+
+                new BufferedReader(new StringReader(remainedLine + logs)).lines().forEach(ob::onNext);
+            }
+
+            ob.onCompleted();
+            stopSubscriptionOptional.ifPresent(Subscription::unsubscribe);
+        }).subscribeOn(Schedulers.io());
     }
 
     public static HttpEntity getEntity(@NotNull final IClusterDetail clusterDetail, @NotNull final String url) throws IOException, HDIException {

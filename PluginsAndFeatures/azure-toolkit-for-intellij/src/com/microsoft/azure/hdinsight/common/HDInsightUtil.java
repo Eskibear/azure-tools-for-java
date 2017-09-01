@@ -47,6 +47,7 @@ import static com.microsoft.azure.hdinsight.common.MessageInfoType.*;
 
 public class HDInsightUtil {
     private static final Object LOCK = new Object();
+    private static final int TELEMETRY_MESSAGE_MAX_LEN = 50;
 
     // The replay subject for the message showed in HDInsight tool window
     private static ReplaySubject<SimpleImmutableEntry<MessageInfoType, String>> toolWindowMessageSubject;
@@ -63,6 +64,14 @@ public class HDInsightUtil {
         });
 
         azureModule.setHdInsightModule(hdInsightRootModule);
+    }
+
+    public static String normalizeTelemetryMessage(@NotNull String message) {
+        if (message.length() > TELEMETRY_MESSAGE_MAX_LEN) {
+            return message.substring(0, TELEMETRY_MESSAGE_MAX_LEN);
+        } else {
+            return message;
+        }
     }
 
     public static void setJobRunningStatus(boolean isRun) {
@@ -156,8 +165,10 @@ public class HDInsightUtil {
     private static void showInfoOnSubmissionMessageWindow(@NotNull final Project project, @NotNull final MessageInfoType type, @NotNull final String message, @NotNull final boolean isNeedClear) {
 
         synchronized (LOCK) {
-            final ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow(CommonConst.SPARK_SUBMISSION_WINDOW_ID);
-            showSubmissionMessage(toolWindow, project, message, type, isNeedClear);
+            try {
+                final ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow(CommonConst.SPARK_SUBMISSION_WINDOW_ID);
+                showSubmissionMessage(toolWindow, project, message, type, isNeedClear);
+            } catch (Exception ignore) { /* IDE disposed */ }
         }
     }
 

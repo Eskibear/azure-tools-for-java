@@ -22,10 +22,7 @@
 
 package com.microsoft.azure.hdinsight.spark.common;
 
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.WireMock;
 import com.microsoft.azure.hdinsight.sdk.common.HttpResponse;
-import cucumber.api.java.After;
 import cucumber.api.java.Before;
 import cucumber.api.java.en.Given;
 import cucumber.api.java.en.Then;
@@ -33,52 +30,41 @@ import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 
 import java.net.URI;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static com.github.tomakehurst.wiremock.client.WireMock.verify;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
-
-import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 
 public class SparkBatchRemoteDebugJobScenario {
     private SparkBatchSubmission submissionMock;
     private Exception caught;
-    private HttpResponse responseMock;
     private ArgumentCaptor<SparkSubmissionParameter> submissionParameterArgumentCaptor;
-    private WireMockServer httpServerMock;
+    private MockHttpService httpServerMock;
     private SparkBatchRemoteDebugJob debugJobMock;
     private Logger loggerMock;
 
     @Before
     public void setUp() throws Throwable {
+        submissionParameterArgumentCaptor = ArgumentCaptor.forClass(SparkSubmissionParameter.class);
         submissionMock = mock(SparkBatchSubmission.class);
         when(submissionMock.getBatchSparkJobStatus(anyString(), anyInt())).thenCallRealMethod();
         when(submissionMock.getHttpResponseViaGet(anyString())).thenCallRealMethod();
-        when(submissionMock.createBatchSparkJob(anyString(), any())).thenCallRealMethod();
+        when(submissionMock.createBatchSparkJob(anyString(), submissionParameterArgumentCaptor.capture())).thenCallRealMethod();
 
-        debugJobMock = mock(SparkBatchRemoteDebugJob.class);
+        debugJobMock = mock(SparkBatchRemoteDebugJob.class, CALLS_REAL_METHODS);
         when(debugJobMock.getSubmission()).thenReturn(submissionMock);
 
         loggerMock = mock(Logger.class);
         when(debugJobMock.log()).thenReturn(loggerMock);
 
         caught = null;
-        responseMock = mock(HttpResponse.class);
-        submissionParameterArgumentCaptor = ArgumentCaptor.forClass(SparkSubmissionParameter.class);
 
-        if (httpServerMock != null) {
-            WireMock.reset();
-        }
-    }
-
-    @After
-    public void cleanUp()
-    {
-        if (httpServerMock != null) {
-            httpServerMock.stop();
-        }
+        this.httpServerMock = new MockHttpService();
     }
 
     @Given("^create batch Spark Job with driver debugging for '(.+)' with following parameters$")
@@ -94,19 +80,14 @@ public class SparkBatchRemoteDebugJobScenario {
                     if (!cleanedConf.isEmpty()) { put("conf", new SparkConfigures(cleanedConf)); }
                 }});
 
-        ArgumentCaptor<String> submittedUrlCaptured = ArgumentCaptor.forClass(String.class);
-        when(submissionMock.createBatchSparkJob(
-                        submittedUrlCaptured.capture(),
-                        submissionParameterArgumentCaptor.capture()))
-                .thenReturn(responseMock);
-
         caught = null;
 
         try {
-            debugJobMock = SparkBatchRemoteDebugJob.factory(connectUrl, parameter, submissionMock);
+            debugJobMock = SparkBatchRemoteDebugJob.factory(httpServerMock.completeUrl(connectUrl),
+                    parameter,
+                    submissionMock);
 
             debugJobMock.createBatchSparkJobWithDriverDebugging();
-            assertEquals(submittedUrlCaptured.getValue(), connectUrl);
         } catch (Exception e) {
             caught = e;
         }
@@ -151,24 +132,7 @@ public class SparkBatchRemoteDebugJobScenario {
 
     @Given("^setup a mock livy service for (.+) request '(.+)' to return '(.+)' with status code (\\d+)$")
     public void mockLivyService(String action, String serviceUrl, String response, int statusCode) throws Throwable {
-        URI mockUri = new URI(serviceUrl);
-        int mockedPort = mockUri.getPort() == -1 ? 80 : mockUri.getPort();
-
-        if (httpServerMock == null || httpServerMock.port() != mockedPort) {
-            httpServerMock = new WireMockServer(
-                    wireMockConfig()
-                            .bindAddress(mockUri.getHost())
-                            .port(mockedPort));
-            httpServerMock.start();
-        }
-
-        configureFor(mockUri.getHost(), mockedPort);
-
-        stubFor(request(action, urlEqualTo(serviceUrl.substring(mockUri.resolve("/").toString().length() - 1)))
-                .willReturn(
-                        aResponse()
-                        .withStatus(statusCode)
-                        .withBody(response)));
+        httpServerMock.stub(action, serviceUrl, statusCode, response);
     }
 
     @Then("^getting spark job url '(.+)', batch ID (\\d+)'s application id should be '(.+)'$")
@@ -176,12 +140,10 @@ public class SparkBatchRemoteDebugJobScenario {
             String connectUrl,
             int batchId,
             String expectedApplicationId) throws Throwable {
-        when(debugJobMock.getSparkJobApplicationId(any(), anyInt())).thenCallRealMethod();
-
         caught = null;
         try {
             assertEquals(expectedApplicationId, debugJobMock.getSparkJobApplicationId(
-                    new URI(connectUrl), batchId));
+                    new URI(httpServerMock.completeUrl(connectUrl)), batchId));
         } catch (Exception e) {
             caught = e;
             assertEquals(expectedApplicationId, "__exception_got__");
@@ -196,10 +158,9 @@ public class SparkBatchRemoteDebugJobScenario {
             int expectedRetriedCount) throws Throwable {
         when(debugJobMock.getDelaySeconds()).thenReturn(1);
         when(debugJobMock.getRetriesMax()).thenReturn(3);
-        when(debugJobMock.getSparkJobApplicationId(any(), anyInt())).thenCallRealMethod();
 
         try {
-            debugJobMock.getSparkJobApplicationId(new URI(connectUrl), batchId);
+            debugJobMock.getSparkJobApplicationId(new URI(httpServerMock.completeUrl(connectUrl)), batchId);
         } catch (Exception ignore) { }
 
         verify(expectedRetriedCount, getRequestedFor(urlEqualTo(getUrl)));
@@ -210,17 +171,14 @@ public class SparkBatchRemoteDebugJobScenario {
             String connectUrl,
             int batchId,
             String expectedDriverLogURL) throws Throwable {
-        when(debugJobMock.getSparkJobDriverLogUrl(any(), anyInt())).thenCallRealMethod();
-
         assertEquals(expectedDriverLogURL, debugJobMock.getSparkJobDriverLogUrl(
-                new URI(connectUrl), batchId));
+                new URI(httpServerMock.completeUrl(connectUrl)), batchId));
     }
 
     @Then("^Parsing driver HTTP address '(.+)' should get host '(.+)'$")
     public void checkParsingDriverHTTPAddressHost(
             String httpAddress,
             String expectedHost) throws Throwable {
-        when(debugJobMock.parseAmHostHttpAddressHost(anyString())).thenCallRealMethod();
 
         assertEquals(expectedHost, debugJobMock.parseAmHostHttpAddressHost(httpAddress));
     }
@@ -230,12 +188,12 @@ public class SparkBatchRemoteDebugJobScenario {
         assertNull(debugJobMock.parseAmHostHttpAddressHost(httpAddress));
     }
 
-    @Then("^parsing JVM debugging port should be ([-]?\\d+) for the following html:$")
-    public void checkParsingJVMDebuggingPort(String expectedPort, List<String> htmls) throws Throwable {
-        when(debugJobMock.parseJvmDebuggingPort(anyString())).thenCallRealMethod();
+    @Then("^parsing JVM debugging port should be ([-]?\\d+) for the following listens:$")
+    public void checkParsingJVMDebuggingPort(String expectedPort, List<String> listens) throws Throwable {
 
-        htmls.forEach((html) -> assertEquals(
-                Integer.parseInt(expectedPort), debugJobMock.parseJvmDebuggingPort(html)));
+        listens.forEach((listen) -> assertEquals(
+                Integer.parseInt(expectedPort),
+                debugJobMock.parseJvmDebuggingPort(listen)));
     }
 
     @Then("^getting Spark driver debugging port from URL '(.+)', batch ID (\\d+) should be (\\d+)$")
@@ -243,11 +201,8 @@ public class SparkBatchRemoteDebugJobScenario {
             String connectUrl,
             int batchId,
             int expectedPort) throws Throwable {
-        when(debugJobMock.getConnectUri()).thenReturn(new URI(connectUrl));
+        when(debugJobMock.getConnectUri()).thenReturn(new URI(httpServerMock.completeUrl(connectUrl)));
         when(debugJobMock.getBatchId()).thenReturn(batchId);
-        when(debugJobMock.getSparkDriverDebuggingPort()).thenCallRealMethod();
-        when(debugJobMock.parseJvmDebuggingPort(anyString())).thenCallRealMethod();
-        when(debugJobMock.getSparkJobDriverLogUrl(any(), anyInt())).thenCallRealMethod();
 
         try {
             assertEquals(expectedPort, debugJobMock.getSparkDriverDebuggingPort());
@@ -263,12 +218,8 @@ public class SparkBatchRemoteDebugJobScenario {
             String connectUrl,
             int batchId,
             String expectedHost) throws Throwable {
-        when(debugJobMock.getConnectUri()).thenReturn(new URI(connectUrl));
+        when(debugJobMock.getConnectUri()).thenReturn(new URI(httpServerMock.completeUrl(connectUrl)));
         when(debugJobMock.getBatchId()).thenReturn(batchId);
-        when(debugJobMock.getSparkDriverHost()).thenCallRealMethod();
-        when(debugJobMock.getSparkJobYarnApplication(any(), anyString())).thenCallRealMethod();
-        when(debugJobMock.getSparkJobApplicationId(any(), anyInt())).thenCallRealMethod();
-        when(debugJobMock.parseAmHostHttpAddressHost(anyString())).thenCallRealMethod();
 
         try {
             assertEquals(expectedHost, debugJobMock.getSparkDriverHost());

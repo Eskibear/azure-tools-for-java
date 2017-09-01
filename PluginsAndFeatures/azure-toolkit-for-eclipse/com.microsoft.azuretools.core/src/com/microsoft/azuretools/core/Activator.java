@@ -46,6 +46,7 @@ import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IConsole;
 import org.eclipse.ui.console.IConsoleManager;
@@ -65,11 +66,13 @@ import com.microsoft.azuretools.azurecommons.deploy.UploadProgressEventListener;
 import com.microsoft.azuretools.azurecommons.util.GetHashMac;
 import com.microsoft.azuretools.azurecommons.xmlhandling.DataOperations;
 import com.microsoft.azuretools.core.azureexplorer.helpers.IDEHelperImpl;
-import com.microsoft.azuretools.core.telemetry.AppInsightsConfigurationImpl;
+import com.microsoft.azuretools.core.azureexplorer.helpers.MvpUIHelperImpl;
+import com.microsoft.azuretools.core.mvp.ui.base.AppSchedulerProvider;
+import com.microsoft.azuretools.core.mvp.ui.base.MvpUIHelperFactory;
+import com.microsoft.azuretools.core.mvp.ui.base.SchedulerProviderFactory;
 import com.microsoft.azuretools.core.ui.UIFactory;
 import com.microsoft.azuretools.core.ui.views.Messages;
 import com.microsoft.azuretools.core.utils.PluginUtil;
-import com.microsoft.azuretools.telemetry.AppInsightsClient;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
 import com.microsoft.tooling.msservices.components.PluginComponent;
 import com.microsoft.tooling.msservices.components.PluginSettings;
@@ -97,8 +100,6 @@ public class Activator extends AbstractUIPlugin implements PluginComponent {
     public static final String CONSOLE_NAME = Messages.consoleName;
     
     private static final EventListenerList DEPLOYMENT_EVENT_LISTENERS = new EventListenerList();
-
-    private boolean isHDInsightEnabled = false;
     
     private Collection<String> obsoletePackages;
     
@@ -110,7 +111,6 @@ public class Activator extends AbstractUIPlugin implements PluginComponent {
      */
     public Activator() {
     }
-
     /*
      * (non-Javadoc)
      * @see org.eclipse.ui.plugin.AbstractUIPlugin#start(org.osgi.framework.BundleContext)
@@ -120,18 +120,31 @@ public class Activator extends AbstractUIPlugin implements PluginComponent {
         plugin = this;
         DefaultLoader.setPluginComponent(this);
         DefaultLoader.setIdeHelper(new IDEHelperImpl());
+        SchedulerProviderFactory.getInstance().init(new AppSchedulerProvider());
+        MvpUIHelperFactory.getInstance().init(new MvpUIHelperImpl());
         initAzureToolsCoreLibsSettings();
         
         // load up the plugin settings
         try {
             loadPluginSettings();
         } catch (IOException e) {
-            DefaultLoader.getUIHelper().showException("An error occurred while attempting to load " +
-                    "settings for the Azure Core plugin.", e, "Azure Core Plugin", false, true);
+            showException("Azure Core Plugin", "An error occurred while attempting to load settings for the Azure Core plugin.", e);
         }
-        isHDInsightEnabled = isHDInsightEnabled(context);
         findObsoletePackages(context);
         super.start(context);
+    }
+
+    private void showException(String title, String msg, Exception ex) {
+        if (Display.getCurrent() == null) {
+            Display.getDefault().asyncExec(new Runnable() {
+                @Override
+                public void run() {
+                    PluginUtil.displayErrorDialogAndLog(null, title, msg, ex);
+                }
+            });
+        } else {
+            PluginUtil.displayErrorDialogAndLog(null, title, msg, ex);
+        }
     }
 
     private void initAzureToolsCoreLibsSettings() {
@@ -187,26 +200,14 @@ public class Activator extends AbstractUIPlugin implements PluginComponent {
 		return ret;
 	}
     
-    public boolean isHDInsightEnabled() {
-        return isHDInsightEnabled;
-    }
-    
     public Collection<String> getObsoletePackages() {
     	return obsoletePackages;
     }
     
-    private boolean isHDInsightEnabled(BundleContext context) {
-        Bundle [] bundles = context.getBundles();
-        boolean isScalaEnabled = false, isHDIEnabled = false;
-        for(int i = 0; i < bundles.length; ++i) {
-            String symbolicName = bundles[i].getSymbolicName().toLowerCase();
-            if(symbolicName.contains("scala-ide")) {
-                isScalaEnabled = true;
-            } else if(symbolicName.equals("com.microsoft.azuretools.hdinsight")) {
-                isHDIEnabled = true;
-            }
-        }
-        return isScalaEnabled && isHDIEnabled;
+    public boolean isScalaInstallationTipNeeded() {    	
+    	boolean isScalaPluginInstalled = PluginUtil.checkPlugInInstallation("org.scala-ide.sdt.core");
+    	boolean isHDInsightSelected = PluginUtil.checkPlugInInstallation("com.microsoft.azuretools.hdinsight");
+    	return isHDInsightSelected && !isScalaPluginInstalled;
     }
     
     private void findObsoletePackages(BundleContext context) {

@@ -23,7 +23,6 @@
 package com.microsoft.azuretools.core.mvp.model.rediscache;
 
 import com.microsoft.azure.management.redis.RedisCache;
-import com.microsoft.azuretools.core.mvp.model.AzureMvpModelHelper;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -36,7 +35,8 @@ public class RedisConnectionPools {
 
     private static final int TIMEOUT = 500;
     private static final int MAX_CONNECTIONS = 1;
-    
+    private static final String GANNOT_GET_RESID = "Cannot get Redis Cache from Azure.";
+
     private LinkedHashMap<String, JedisPool> pools;
 
     private RedisConnectionPools() {
@@ -53,7 +53,7 @@ public class RedisConnectionPools {
 
     /**
      * Get Jedis connection.
-     * 
+     *
      * @param sid
      *            subscription id of Redis Cache
      * @param id
@@ -73,7 +73,7 @@ public class RedisConnectionPools {
 
     /**
      * Destroy the jedisPool.
-     * 
+     *
      * @param id
      *            id of the jedisPool which needs to be destroyed
      */
@@ -88,7 +88,11 @@ public class RedisConnectionPools {
     }
 
     private void connect(String sid, String id) throws Exception {
-        RedisCache redisCache = AzureMvpModelHelper.getInstance().getRedisCache(sid, id);
+        RedisCache redisCache = AzureRedisMvpModel.getInstance().getRedisCache(sid, id);
+
+        if (redisCache == null) {
+            throw new Exception(GANNOT_GET_RESID);
+        }
 
         // get redis setting
         String hostName = redisCache.hostName();

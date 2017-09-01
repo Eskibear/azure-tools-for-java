@@ -22,6 +22,7 @@
 
 package com.microsoft.tooling.msservices.serviceexplorer.azure.rediscache;
 
+import com.microsoft.azuretools.authmanage.AuthMethodManager;
 import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
 import com.microsoft.azuretools.core.mvp.ui.base.NodeContent;
 import com.microsoft.azuretools.telemetry.AppInsightsConstants;
@@ -36,7 +37,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class RedisCacheNode extends Node implements TelemetryProperties {
-    
+
     public static final String TYPE = "Microsoft.Cache/Redis";
     public static final String REDISCACHE_ICON_PATH = "RedisCache.png";
 
@@ -44,28 +45,26 @@ public class RedisCacheNode extends Node implements TelemetryProperties {
     private final String resourceId;
     private final String provisionState;
     private final String subscriptionId;
-    
+
     // node related
     private static final String CREATING_STATE = "Creating";
     private static final String CREATING_REDIS_NAME_FORMAT = "%s(%s...)";
-    
+
     // action names
     private static final String DELETE_ACTION = "Delete";
     private static final String SHOW_PROPERTY_ACTION = "Show properties";
     private static final String OPEN_IN_BROWSER_ACTION = "Open in browser";
-    private static final String OPEN_EXPLORER = "Open Explorer";
-    
+    private static final String OPEN_EXPLORER = "Open Redis Explorer";
+
     // string format
     private static final String DELETE_CONFIRM_DIALOG_FORMAT = "This operation will delete redis cache: %s."
             + "\nAre you sure you want to continue?";
     private static final String DELETE_CONFIRM_TITLE = "Deleting Redis Cache";
-    private static final String AZURE_PORTAL_LINK_FORMAT = "https://ms.portal.azure.com/#resource/%s/overview";
-
-    
+    private static final String AZURE_PORTAL_LINK_FORMAT = "%s/#resource/%s/overview";
 
     /**
      * Node for each Redis Cache Resource.
-     * 
+     *
      * @param parent
      *            The parent node of this node
      * @param subscriptionId
@@ -75,7 +74,7 @@ public class RedisCacheNode extends Node implements TelemetryProperties {
      */
     public RedisCacheNode(Node parent, String subscriptionId, NodeContent content) {
         super(subscriptionId + content.getName(), content.getProvisionState().equals(CREATING_STATE)
-                ? String.format(CREATING_REDIS_NAME_FORMAT, content.getName(), CREATING_STATE) 
+                ? String.format(CREATING_REDIS_NAME_FORMAT, content.getName(), CREATING_STATE)
                 : content.getName(), parent, REDISCACHE_ICON_PATH, true);
         this.name = content.getName();
         this.resourceId = content.getId();
@@ -85,8 +84,8 @@ public class RedisCacheNode extends Node implements TelemetryProperties {
     }
 
     // Show property action class
-    public class ShowRedisCachePropertyAction extends NodeActionListener {
-        
+    private class ShowRedisCachePropertyAction extends NodeActionListener {
+
         @Override
         protected void actionPerformed(NodeActionEvent e) throws AzureCmdException {
             DefaultLoader.getUIHelper().openRedisPropertyView(RedisCacheNode.this);
@@ -94,7 +93,7 @@ public class RedisCacheNode extends Node implements TelemetryProperties {
     }
 
     // Delete Redis Cache action class
-    public class DeleteRedisCacheAction extends AzureNodeActionPromptListener {
+    private class DeleteRedisCacheAction extends AzureNodeActionPromptListener {
         public DeleteRedisCacheAction() {
             super(RedisCacheNode.this, String.format(DELETE_CONFIRM_DIALOG_FORMAT, RedisCacheNode.this.name),
                     DELETE_CONFIRM_TITLE);
@@ -102,7 +101,7 @@ public class RedisCacheNode extends Node implements TelemetryProperties {
 
         @Override
         protected void azureNodeAction(NodeActionEvent e) throws AzureCmdException {
-            RedisCacheNode.this.getParent().removeNode(RedisCacheNode.this.subscriptionId, 
+            RedisCacheNode.this.getParent().removeNode(RedisCacheNode.this.subscriptionId,
                     RedisCacheNode.this.resourceId, RedisCacheNode.this);
         }
 
@@ -110,18 +109,24 @@ public class RedisCacheNode extends Node implements TelemetryProperties {
         protected void onSubscriptionsChanged(NodeActionEvent e) throws AzureCmdException {
         }
     }
-    
+
     // Open in browser action class
-    public class OpenInBrowserAction extends NodeActionListener {
+    private class OpenInBrowserAction extends NodeActionListener {
         @Override
         protected void actionPerformed(NodeActionEvent e) throws AzureCmdException {
-            DefaultLoader.getUIHelper().openInBrowser(String.format(AZURE_PORTAL_LINK_FORMAT, 
+            String portalUrl = "";
+            try {
+                portalUrl = AuthMethodManager.getInstance().getAzureManager().getPortalUrl();
+            } catch (Exception exception) {
+                System.out.println(exception.getMessage());
+            }
+            DefaultLoader.getUIHelper().openInBrowser(String.format(AZURE_PORTAL_LINK_FORMAT, portalUrl,
                     RedisCacheNode.this.resourceId));
         }
     }
-    
+
     // Open Redis Cache Explorer
-    public class OpenRedisExplorerAction extends NodeActionListener {
+    private class OpenRedisExplorerAction extends NodeActionListener {
         @Override
         protected void actionPerformed(NodeActionEvent e) throws AzureCmdException {
             DefaultLoader.getUIHelper().openRedisExplorer(RedisCacheNode.this);
@@ -149,7 +154,7 @@ public class RedisCacheNode extends Node implements TelemetryProperties {
     public String getSubscriptionId() {
         return this.subscriptionId;
     }
-    
+
     public String getResourceId() {
         return this.resourceId;
     }

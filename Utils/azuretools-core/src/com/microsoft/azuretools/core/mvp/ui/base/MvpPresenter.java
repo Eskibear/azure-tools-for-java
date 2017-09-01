@@ -25,7 +25,7 @@ package com.microsoft.azuretools.core.mvp.ui.base;
 public abstract class MvpPresenter<V extends MvpView> {
 
     private V mvpView;
-
+    
     public V getMvpView() {
         return mvpView;
     }
@@ -37,8 +37,12 @@ public abstract class MvpPresenter<V extends MvpView> {
     public void onDetachView() {
         this.mvpView = null;
     }
-    
+
     public boolean isViewDetached() {
         return this.mvpView == null;
+    }
+
+    public SchedulerProvider getSchedulerProvider() {
+        return SchedulerProviderFactory.getInstance().getSchedulerProvider();
     }
 }
