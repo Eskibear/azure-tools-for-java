@@ -27,36 +27,34 @@ import com.intellij.execution.ProgramRunnerUtil;
 import com.intellij.execution.RunManagerEx;
 import com.intellij.execution.RunnerAndConfigurationSettings;
 import com.intellij.execution.configurations.ConfigurationFactory;
-import com.intellij.execution.configurations.ConfigurationType;
 import com.intellij.execution.executors.DefaultRunExecutor;
 import com.intellij.execution.impl.RunDialog;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationType;
+import com.intellij.notification.Notifications;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.microsoft.azuretools.ijidea.utility.AzureAnAction;
-import com.microsoft.intellij.runner.container.utils.Constant;
 import com.microsoft.intellij.runner.container.AzureDockerSupportConfigurationType;
+import com.microsoft.intellij.runner.container.utils.Constant;
 
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-public class RunOnDockerHostAction extends AzureAnAction {
-
-    private static final String DIALOG_TITLE = "Run on Docker Host";
-
-    private final AzureDockerSupportConfigurationType configType;
-
-    public RunOnDockerHostAction() {
-        this.configType = AzureDockerSupportConfigurationType.getInstance();
-    }
+public class PushImageAction extends AzureAnAction {
+    private static final String NOTIFICATION_GROUP_ID = "Azure Plugin";
+    private static final String DIALOG_TITLE = "Push Image";
+    private final AzureDockerSupportConfigurationType configType = AzureDockerSupportConfigurationType.getInstance();
 
 
     @Override
     public void onActionPerformed(AnActionEvent event) {
         Project project = event.getProject();
         if (project == null) {
+            notifyError(Constant.ERROR_NO_SELECTED_PROJECT);
             return;
         }
         ApplicationManager.getApplication().invokeLater(() -> runConfiguration(project));
@@ -77,12 +75,12 @@ public class RunOnDockerHostAction extends AzureAnAction {
     @SuppressWarnings({"deprecation", "Duplicates"})
     private void runConfiguration(Project project) {
         final RunManagerEx manager = RunManagerEx.getInstanceEx(project);
-        final ConfigurationFactory factory = configType.getDockerHostRunConfigurationFactory();
+        final ConfigurationFactory factory = configType.getPushImageRunConfigurationFactory();
         RunnerAndConfigurationSettings settings = manager.findConfigurationByName(
                 String.format("%s: %s", factory.getName(), project.getName()));
         if (settings == null) {
-            settings = manager.createConfiguration(String.format("%s: %s", factory.getName(),
-                    project.getName()), factory);
+            settings = manager.createConfiguration(String.format("%s: %s", factory.getName(), project.getName()),
+                    factory);
         }
         if (RunDialog.editConfiguration(project, settings, DIALOG_TITLE, DefaultRunExecutor.getRunExecutorInstance())) {
             List<BeforeRunTask> tasks = new ArrayList<>(manager.getBeforeRunTasks(settings.getConfiguration()));
@@ -90,5 +88,10 @@ public class RunOnDockerHostAction extends AzureAnAction {
             manager.setSelectedConfiguration(settings);
             ProgramRunnerUtil.executeConfiguration(project, settings, DefaultRunExecutor.getRunExecutorInstance());
         }
+    }
+
+    private void notifyError(String msg) {
+        Notification notification = new Notification(NOTIFICATION_GROUP_ID, DIALOG_TITLE, msg, NotificationType.ERROR);
+        Notifications.Bus.notify(notification);
     }
 }

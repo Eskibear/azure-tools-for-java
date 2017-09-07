@@ -31,7 +31,6 @@ import com.intellij.packaging.artifacts.Artifact;
 import com.intellij.packaging.impl.run.BuildArtifactsBeforeRunTaskProvider;
 import com.intellij.ui.AnActionButton;
 import com.intellij.ui.HideableDecorator;
-import com.intellij.ui.JBColor;
 import com.intellij.ui.ListCellRendererWrapper;
 import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.table.JBTable;
@@ -63,7 +62,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import javax.swing.BorderFactory;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -362,6 +360,7 @@ public class SettingPanel implements WebAppOnLinuxDeployView {
         ));
 
         // set target
+        //noinspection Duplicates
         if (lastSelectedArtifact != null) {
             webAppOnLinuxDeployConfiguration.setTargetPath(lastSelectedArtifact.getOutputFilePath());
             Path p = Paths.get(webAppOnLinuxDeployConfiguration.getTargetPath());
@@ -456,6 +455,8 @@ public class SettingPanel implements WebAppOnLinuxDeployView {
         }
     }
 
+
+    @SuppressWarnings("Duplicates")
     private void setupArtifactCombo(List<Artifact> artifacts, String targetPath) {
         isCbArtifactInited = false;
         cbArtifact.removeAllItems();

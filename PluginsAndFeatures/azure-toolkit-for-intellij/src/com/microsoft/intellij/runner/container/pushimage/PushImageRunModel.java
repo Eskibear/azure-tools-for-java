@@ -20,35 +20,36 @@
  * SOFTWARE.
  */
 
-package com.microsoft.intellij.runner.container.webapponlinux;
+package com.microsoft.intellij.runner.container.pushimage;
 
-import com.intellij.execution.configurations.ConfigurationFactory;
-import com.intellij.execution.configurations.RunConfiguration;
-import com.intellij.openapi.project.Project;
-import com.microsoft.intellij.runner.container.AzureDockerSupportConfigurationType;
+import com.microsoft.azuretools.core.mvp.model.webapp.PrivateRegistryImageSetting;
 
-import org.jetbrains.annotations.NotNull;
+public class PushImageRunModel {
+    private PrivateRegistryImageSetting privateRegistryImageSetting = new PrivateRegistryImageSetting();
+    private String targetPath;
+    private String targetName;
 
-public class WebAppOnLinuxDeployConfigurationFactory extends ConfigurationFactory {
-    private static final String FACTORY_NAME = "Web App (Linux)";
-
-    public WebAppOnLinuxDeployConfigurationFactory(AzureDockerSupportConfigurationType configurationType) {
-        super(configurationType);
+    public PrivateRegistryImageSetting getPrivateRegistryImageSetting() {
+        return privateRegistryImageSetting;
     }
 
-    @NotNull
-    @Override
-    public RunConfiguration createTemplateConfiguration(@NotNull Project project) {
-        return new WebAppOnLinuxDeployConfiguration(project, this, null);
+    public void setPrivateRegistryImageSetting(PrivateRegistryImageSetting privateRegistryImageSetting) {
+        this.privateRegistryImageSetting = privateRegistryImageSetting;
     }
 
-    @Override
-    public String getName() {
-        return FACTORY_NAME;
+    public String getTargetPath() {
+        return targetPath;
     }
 
-    @Override
-    public RunConfiguration createConfiguration(String name, RunConfiguration template) {
-        return new WebAppOnLinuxDeployConfiguration(template.getProject(), this, name);
+    public void setTargetPath(String targetPath) {
+        this.targetPath = targetPath;
+    }
+
+    public String getTargetName() {
+        return targetName;
+    }
+
+    public void setTargetName(String targetName) {
+        this.targetName = targetName;
     }
 }
